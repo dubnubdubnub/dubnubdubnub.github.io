@@ -1,0 +1,63 @@
+# Namespace-scoped Cloudflare Tunnel. Dials OUT to Cloudflare — no ingress,
+# no public IP, no cluster-scoped resources needed.
+#
+# The tunnel token is NOT in this file. Create it as a Secret first:
+#
+#   kubectl create secret generic cloudflared-token \
+#     -n tenant-isaac --from-literal=token='<YOUR_TUNNEL_TOKEN>'
+#
+# Get <YOUR_TUNNEL_TOKEN> from the Cloudflare Zero Trust dashboard:
+#   Networks -> Tunnels -> Create a tunnel -> Cloudflared -> copy the token
+#   (the long string after `--token` in the install command).
+#
+# Then in that same tunnel's "Public Hostname" tab, route:
+#   <portfolio.yourdomain.com>  ->  HTTP  ->  site:80
+# Cloudflare creates the DNS record automatically.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+  namespace: tenant-isaac
+  labels:
+    app: cloudflared
+spec:
+  replicas: 2 # HA: two connectors so a pod restart never drops the tunnel
+  selector:
+    matchLabels:
+      app: cloudflared
+  template:
+    metadata:
+      labels:
+        app: cloudflared
+    spec:
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:2025.5.0
+          args:
+            - tunnel
+            - --no-autoupdate
+            - --metrics
+            - 0.0.0.0:2000 # expose /ready for the liveness probe
+            - run
+            - --token
+            - $(TUNNEL_TOKEN)
+          env:
+            - name: TUNNEL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflared-token
+                  key: token
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              # cloudflared's built-in metrics/health endpoint
+              path: /ready
+              port: 2000
+            initialDelaySeconds: 10
+            periodSeconds: 20
