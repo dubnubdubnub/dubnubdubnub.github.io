@@ -1,0 +1,6 @@
+# Keep the image lean — only ship the static site.
+.git
+.github
+deploy
+.gitattributes
+*.md
