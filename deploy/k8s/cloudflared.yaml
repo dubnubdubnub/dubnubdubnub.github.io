@@ -4,7 +4,7 @@
 # The tunnel token is NOT in this file. Create it as a Secret first:
 #
 #   kubectl create secret generic cloudflared-token \
-#     -n tenant-isaac --from-literal=token='<YOUR_TUNNEL_TOKEN>'
+#     -n web --from-literal=token='<YOUR_TUNNEL_TOKEN>'
 #
 # Get <YOUR_TUNNEL_TOKEN> from the Cloudflare Zero Trust dashboard:
 #   Networks -> Tunnels -> Create a tunnel -> Cloudflared -> copy the token
@@ -17,7 +17,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: cloudflared
-  namespace: tenant-isaac
+  namespace: web
   labels:
     app: cloudflared
 spec:
