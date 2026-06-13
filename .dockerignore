@@ -1,6 +1,6 @@
-# Keep the image lean — only ship the static site.
+# Trim the build context. deploy/ is intentionally NOT ignored — the
+# Dockerfile needs deploy/nginx.conf, then removes the folder from the image.
 .git
 .github
-deploy
 .gitattributes
 *.md
