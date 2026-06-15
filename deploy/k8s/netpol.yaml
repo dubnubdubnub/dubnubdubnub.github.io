@@ -1,0 +1,86 @@
+# Network isolation for the `web` namespace — the cluster's main internet-facing
+# surface (static site + the cloudflared tunnel).
+#
+# The cluster has NO NetworkPolicies by default, so every pod can reach every
+# other pod and the API server. These policies make the static site a dead end:
+# it can only be reached by the tunnel, and can only talk to DNS — so an nginx
+# compromise can't pivot into the rest of the cluster.
+#
+# k3s enforces NetworkPolicy via its built-in kube-router controller.
+---
+# Default-deny ingress for every pod in `web`. Egress is left per-pod (below)
+# so cloudflared keeps its outbound tunnel to the Cloudflare edge.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: web
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+# The site only accepts :80 from the tunnel pods and from the node (kubelet
+# probes + svc routing). Nothing else in the cluster can reach it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: site-allow-ingress
+  namespace: web
+spec:
+  podSelector:
+    matchLabels:
+      app: site
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: cloudflared
+        - ipBlock:
+            cidr: 10.1.1.0/24 # node IPs (kubelet liveness/readiness probes)
+      ports:
+        - protocol: TCP
+          port: 80
+---
+# cloudflared's liveness probe hits :2000 from the node; allow just that.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: cloudflared-allow-probe
+  namespace: web
+spec:
+  podSelector:
+    matchLabels:
+      app: cloudflared
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - ipBlock:
+            cidr: 10.1.1.0/24
+      ports:
+        - protocol: TCP
+          port: 2000
+---
+# The static site needs no outbound traffic except DNS. Lock egress to that.
+# (cloudflared has no egress policy, so it keeps unrestricted outbound — it
+# legitimately dials the Cloudflare edge and proxies to site/onboard.)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: site-egress-dns-only
+  namespace: web
+spec:
+  podSelector:
+    matchLabels:
+      app: site
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
