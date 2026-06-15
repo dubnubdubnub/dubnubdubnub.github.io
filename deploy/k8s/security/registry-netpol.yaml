@@ -1,0 +1,37 @@
+# The in-cluster registry (kube-system/registry, NodePort 30500) has no auth or
+# TLS. Anyone who can reach it can PUSH images that workloads later pull by tag
+# (onboard, the bots, runners) — a code-execution foothold.
+#
+# This policy stops the *pod-network* path: a compromised app pod (site, onboard,
+# a bot, a tenant workload) can no longer reach the registry to push a poisoned
+# image. Legitimate image PULLS are unaffected — containerd pulls from the node
+# (via 10.1.1.x:30500), which kube-proxy presents as node-sourced traffic, and
+# the node CIDR is allowed below. CI pushes from the arc-runners namespace are
+# also still allowed.
+#
+# NOTE: this does NOT close the LAN path (a device on 10.1.1.0/24 can still push,
+# because pulls require that same path to stay open). The real fix for that is
+# registry auth + TLS — see the audit notes. This is defense-in-depth, not a
+# replacement.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: registry-restrict-ingress
+  namespace: kube-system
+spec:
+  podSelector:
+    matchLabels:
+      app: registry
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        # Nodes (containerd pulls + NodePort traffic SNAT'd to node IP) and LAN.
+        - ipBlock:
+            cidr: 10.1.1.0/24
+        # CI runners that build & push images.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: arc-runners
+      ports:
+        - protocol: TCP
+          port: 5000

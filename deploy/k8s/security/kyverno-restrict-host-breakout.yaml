@@ -1,0 +1,64 @@
+# Cluster-wide guardrail: block the primitives an attacker uses to break OUT of
+# a container onto the node — privileged, host namespaces, hostPath, host ports.
+#
+# Why custom instead of the full PodSecurity "baseline" profile: baseline only
+# allows containers to ADD the NET_BIND_SERVICE capability, but the hardened
+# `site` nginx legitimately adds CHOWN/SETUID/SETGID/DAC_OVERRIDE to drop to the
+# nginx user. This policy targets the dangerous escape hatches without flagging
+# that. Infra namespaces that genuinely need host access (Longhorn, KubeVirt,
+# kata, CDI, node-exporter, the CNI, etc.) are excluded.
+#
+# Effect: a compromised internet-facing app (site / onboard) or a poisoned image
+# pulled from the registry CANNOT schedule a privileged/hostPath pod to pivot to
+# the host — even in a namespace `onboard` provisions for a tenant.
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: restrict-host-breakout
+  annotations:
+    policies.kyverno.io/title: Restrict host breakout primitives
+    policies.kyverno.io/severity: high
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: no-privileged-host-access
+      match:
+        any:
+          - resources:
+              kinds: [Pod]
+      exclude:
+        any:
+          - resources:
+              namespaces:
+                - kube-system
+                - longhorn-system
+                - kubevirt
+                - cdi
+                - monitoring
+                - kyverno
+                - arc-systems
+                - arc-runners
+                - win-runners
+      validate:
+        message: >-
+          Privileged mode, host namespaces (hostNetwork/hostPID/hostIPC),
+          hostPath volumes, and host ports are not allowed in this namespace.
+        pattern:
+          spec:
+            =(hostNetwork): "false"
+            =(hostPID): "false"
+            =(hostIPC): "false"
+            =(volumes):
+              - X(hostPath): "null"
+            containers:
+              - =(securityContext):
+                  =(privileged): "false"
+                =(ports):
+                  - X(hostPort): "null"
+            =(initContainers):
+              - =(securityContext):
+                  =(privileged): "false"
+            =(ephemeralContainers):
+              - =(securityContext):
+                  =(privileged): "false"
