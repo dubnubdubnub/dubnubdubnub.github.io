@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: site
+  namespace: web
+  labels: { app: site }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: site }
+  template:
+    metadata:
+      labels: { app: site }
+    spec:
+      automountServiceAccountToken: false
+      imagePullSecrets: [{name: ghcr-pull}]   # Kyverno-cloned into ns web (ghcr-pull=enabled)
+      securityContext:
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: nginx
+          image: ghcr.io/dubnubdubnub/portfolio   # tag set by deploy/kustomization.yaml (CI writes :sha)
+          imagePullPolicy: IfNotPresent           # :sha is immutable
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              add: ["CHOWN", "SETUID", "SETGID", "NET_BIND_SERVICE", "DAC_OVERRIDE"]
+          ports: [{containerPort: 80}]
+          resources:
+            requests: { cpu: 25m, memory: 32Mi }
+            limits: { cpu: 200m, memory: 128Mi }
+          readinessProbe:
+            httpGet: { path: /index.html, port: 80 }
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /index.html, port: 80 }
+            initialDelaySeconds: 5
+            periodSeconds: 20
