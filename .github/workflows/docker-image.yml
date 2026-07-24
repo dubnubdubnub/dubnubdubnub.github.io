@@ -3,6 +3,7 @@ name: Build and push site image
 on:
   push:
     branches: ["main"]
+    paths-ignore: ["deploy/**"]
   workflow_dispatch:
 
 env:
@@ -12,7 +13,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write # write back deploy/kustomization.yaml
       packages: write # push to GHCR using the built-in GITHUB_TOKEN
     steps:
       - name: Checkout
@@ -34,3 +35,13 @@ jobs:
           tags: |
             ${{ env.IMAGE }}:latest
             ${{ env.IMAGE }}:${{ github.sha }}
+
+      - name: Write image tag into deploy/ and commit back
+        run: |
+          curl -sL https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.4.3/kustomize_v5.4.3_linux_amd64.tar.gz | tar xz
+          (cd deploy && ../kustomize edit set image ghcr.io/dubnubdubnub/portfolio=ghcr.io/dubnubdubnub/portfolio:${{ github.sha }})
+          git config user.name "ci-bot"
+          git config user.email "ci@dubnubdubnub"
+          git add deploy/kustomization.yaml
+          git commit -m "ci: deploy ${{ github.sha }} [skip ci]" || { echo "no deploy change"; exit 0; }
+          git push
