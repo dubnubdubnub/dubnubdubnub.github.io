@@ -3,8 +3,9 @@ kind: Kustomization
 namespace: web
 # ns web is created out-of-band; it already carries ghcr-pull=enabled + dubcluster.io/public=true.
 resources:
-  - 10-deployment.yaml
-  - 20-service.yaml
+- 10-deployment.yaml
+- 20-service.yaml
 images:
-  - name: ghcr.io/dubnubdubnub/portfolio
-    newTag: 519f94979207d27c43faf416d5c7a0e1c219fbd2   # from `git rev-parse origin/main`; CI write-back keeps it current
+- name: ghcr.io/dubnubdubnub/portfolio
+  newName: ghcr.io/dubnubdubnub/portfolio
+  newTag: ecb5b22744d55a27ac7b6a0e961fef64176b5583
