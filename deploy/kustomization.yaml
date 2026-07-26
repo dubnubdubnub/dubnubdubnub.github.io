@@ -8,4 +8,4 @@ resources:
 images:
 - name: ghcr.io/dubnubdubnub/portfolio
   newName: ghcr.io/dubnubdubnub/portfolio
-  newTag: ecb5b22744d55a27ac7b6a0e961fef64176b5583
+  newTag: dae01d1ffff96984f199b11588085e64518a550d
